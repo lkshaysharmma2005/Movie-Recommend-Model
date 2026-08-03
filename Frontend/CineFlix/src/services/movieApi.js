@@ -270,13 +270,73 @@ function deduplicateMovies(list) {
 // FASTAPI ML RECOMMENDATIONS
 // ===========================
 
+const OMDB_API_KEY = "61dccdfb";
+
+async function fetchPoster(title) {
+  try {
+    const response = await fetch(
+      `https://www.omdbapi.com/?t=${encodeURIComponent(title)}&apikey=${OMDB_API_KEY}`
+    );
+
+    const data = await response.json();
+
+    if (data.Response === "True" && data.Poster !== "N/A") {
+      return data.Poster;
+    }
+
+    const searchResponse = await fetch(
+      `https://www.omdbapi.com/?s=${encodeURIComponent(title)}&apikey=${OMDB_API_KEY}`
+    );
+
+    const searchData = await searchResponse.json();
+
+    if (
+      searchData.Response === "True" &&
+      searchData.Search &&
+      searchData.Search.length > 0 &&
+      searchData.Search[0].Poster !== "N/A"
+    ) {
+      return searchData.Search[0].Poster;
+    }
+
+    return "https://placehold.co/300x450?text=No+Poster";
+  } catch (error) {
+    console.error("Poster Fetch Error:", error);
+
+    return "https://placehold.co/300x450?text=No+Poster";
+  }
+}
+
 export async function getRecommendations(movieTitle) {
   try {
     const response = await API.post("/recommend", {
       movie: movieTitle,
     });
 
-    return response.data;
+    const recommendations = await Promise.all(
+      response.data.recommendations.map(async (movie) => {
+        const poster = await fetchPoster(movie.title);
+
+        return {
+          id: movie.id,
+          title: movie.title,
+          poster,
+          backdrop: poster,
+          rating: movie.rating ?? 8.0,
+          year: movie.year ?? "N/A",
+          genres: movie.genres ?? ["Movie"],
+          summary: movie.summary ?? "No description available.",
+          type: movie.type ?? "Movie",
+          runtime: movie.runtime ?? "N/A",
+          language: movie.language ?? "English",
+        };
+      })
+    );
+
+    return {
+      success: true,
+      recommendations,
+    };
   } catch (error) {
     console.error("Recommendation API Error:", error);
 
